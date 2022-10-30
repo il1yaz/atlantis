@@ -729,6 +729,8 @@ func NewServer(userConfig UserConfig, config Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	usersAllowlist := events.NewUsersAllowlistChecker(userConfig.UsersAllowlist)
+
 	locksController := &controllers.LocksController{
 		AtlantisVersion:    config.AtlantisVersion,
 		AtlantisURL:        parsedURL,
@@ -793,6 +795,7 @@ func NewServer(userConfig UserConfig, config Config) (*Server, error) {
 		AzureDevopsWebhookBasicUser:     []byte(userConfig.AzureDevopsWebhookUser),
 		AzureDevopsWebhookBasicPassword: []byte(userConfig.AzureDevopsWebhookPassword),
 		AzureDevopsRequestValidator:     &events_controllers.DefaultAzureDevopsRequestValidator{},
+		UserAllowlistChecker:            usersAllowlist,
 	}
 	githubAppController := &controllers.GithubAppController{
 		AtlantisURL:         parsedURL,

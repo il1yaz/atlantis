@@ -86,6 +86,7 @@ type VCSEventsController struct {
 	// Azure DevOps Team Project. If empty, no request validation is done.
 	AzureDevopsWebhookBasicPassword []byte
 	AzureDevopsRequestValidator     AzureDevopsRequestValidator
+	UserAllowlistChecker            *events.UsersAllowlistChecker
 }
 
 // Post handles POST webhook requests.
@@ -546,6 +547,19 @@ func (e *VCSEventsController) handleCommentEvent(logger logging.SimpleLogging, b
 
 		err := errors.New("Repo not allowlisted")
 
+		return HTTPResponse{
+			body: err.Error(),
+			err: HTTPError{
+				err:        err,
+				code:       http.StatusForbidden,
+				isSilenced: e.SilenceAllowlistErrors,
+			},
+		}
+	}
+
+	if !e.UserAllowlistChecker.IsAllowListed(user.Username) {
+		logger.Info("user %s not allowed to run commands", user.Username)
+		err := errors.New("User not in allowlist")
 		return HTTPResponse{
 			body: err.Error(),
 			err: HTTPError{

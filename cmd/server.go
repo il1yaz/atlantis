@@ -97,6 +97,7 @@ const (
 	// RepoWhitelistFlag is deprecated for RepoAllowlistFlag.
 	RepoWhitelistFlag          = "repo-whitelist"
 	RepoAllowlistFlag          = "repo-allowlist"
+	UsersAllowlistFlag         = "users-allowlist"
 	RequireApprovalFlag        = "require-approval"
 	RequireMergeableFlag       = "require-mergeable"
 	SilenceNoProjectsFlag      = "silence-no-projects"
@@ -305,6 +306,9 @@ var stringFlags = map[string]stringFlag{
 			"The format is {hostname}/{owner}/{repo}, ex. github.com/runatlantis/atlantis. '*' matches any characters until the next comma. Examples: " +
 			"all repos: '*' (not secure), an entire hostname: 'internalgithub.com/*' or an organization: 'github.com/runatlantis/*'." +
 			" For Bitbucket Server, {owner} is the name of the project (not the key).",
+	},
+	UsersAllowlistFlag: {
+		description: "Comma separated list of usernames that Atlantis will run commands. ",
 	},
 	RepoWhitelistFlag: {
 		description: "[Deprecated for --repo-allowlist].",
@@ -746,6 +750,7 @@ func (s *ServerCmd) setDefaults(c *server.UserConfig) {
 	if c.WebPassword == "" {
 		c.WebPassword = DefaultWebPassword
 	}
+
 }
 
 func (s *ServerCmd) validate(userConfig server.UserConfig) error {
