@@ -86,7 +86,7 @@ type VCSEventsController struct {
 	// Azure DevOps Team Project. If empty, no request validation is done.
 	AzureDevopsWebhookBasicPassword []byte
 	AzureDevopsRequestValidator     AzureDevopsRequestValidator
-	UserAllowlistChecker            *events.UsersAllowlistChecker
+	GitlabUserAllowlistChecker      *events.GitlabUsersAllowlistChecker
 }
 
 // Post handles POST webhook requests.
@@ -557,16 +557,20 @@ func (e *VCSEventsController) handleCommentEvent(logger logging.SimpleLogging, b
 		}
 	}
 
-	if !e.UserAllowlistChecker.IsAllowListed(user.Username) {
+	if !e.GitlabUserAllowlistChecker.IsAllowListed(user.Username) {
 		logger.Info("user %s not allowed to run commands", user.Username)
-		err := errors.New("User not in allowlist")
+		if err := e.VCSClient.CreateComment(baseRepo, pullNum, fmt.Sprintf("User %s not allowed to run commands", user.Username), ""); err != nil {
+			return HTTPResponse{
+				body: err.Error(),
+				err: HTTPError{
+					err:        err,
+					code:       http.StatusForbidden,
+					isSilenced: e.SilenceAllowlistErrors,
+				},
+			}
+		}
 		return HTTPResponse{
-			body: err.Error(),
-			err: HTTPError{
-				err:        err,
-				code:       http.StatusForbidden,
-				isSilenced: e.SilenceAllowlistErrors,
-			},
+			body: fmt.Sprintf("User %s not allowed to run commands", user.Username),
 		}
 	}
 

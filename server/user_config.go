@@ -47,6 +47,7 @@ type UserConfig struct {
 	GitlabToken                     string `mapstructure:"gitlab-token"`
 	GitlabUser                      string `mapstructure:"gitlab-user"`
 	GitlabWebhookSecret             string `mapstructure:"gitlab-webhook-secret"`
+	GitlabUsersAllowlist            string `mapstructure:"gitlab-users-allowlist"`
 	APISecret                       string `mapstructure:"api-secret"`
 	HidePrevPlanComments            bool   `mapstructure:"hide-prev-plan-comments"`
 	LockingDBType                   string `mapstructure:"locking-db-type"`
@@ -97,7 +98,6 @@ type UserConfig struct {
 	TFEHostname            string          `mapstructure:"tfe-hostname"`
 	TFELocalExecutionMode  bool            `mapstructure:"tfe-local-execution-mode"`
 	TFEToken               string          `mapstructure:"tfe-token"`
-	UsersAllowlist         string          `mapstructure:"users-allowlist"`
 	VarFileAllowlist       string          `mapstructure:"var-file-allowlist"`
 	VCSStatusName          string          `mapstructure:"vcs-status-name"`
 	DefaultTFVersion       string          `mapstructure:"default-tf-version"`

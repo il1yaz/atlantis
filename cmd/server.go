@@ -97,7 +97,7 @@ const (
 	// RepoWhitelistFlag is deprecated for RepoAllowlistFlag.
 	RepoWhitelistFlag          = "repo-whitelist"
 	RepoAllowlistFlag          = "repo-allowlist"
-	UsersAllowlistFlag         = "users-allowlist"
+	GitlabUsersAllowlistFlag   = "gitlab-users-allowlist"
 	RequireApprovalFlag        = "require-approval"
 	RequireMergeableFlag       = "require-mergeable"
 	SilenceNoProjectsFlag      = "silence-no-projects"
@@ -307,7 +307,7 @@ var stringFlags = map[string]stringFlag{
 			"all repos: '*' (not secure), an entire hostname: 'internalgithub.com/*' or an organization: 'github.com/runatlantis/*'." +
 			" For Bitbucket Server, {owner} is the name of the project (not the key).",
 	},
-	UsersAllowlistFlag: {
+	GitlabUsersAllowlistFlag: {
 		description: "Comma separated list of usernames that Atlantis will run commands. ",
 	},
 	RepoWhitelistFlag: {
