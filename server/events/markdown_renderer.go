@@ -23,6 +23,8 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	"github.com/runatlantis/atlantis/server/events/command"
 	"github.com/runatlantis/atlantis/server/events/models"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 var (
@@ -94,6 +96,7 @@ type planSuccessData struct {
 
 type policyCheckSuccessData struct {
 	models.PolicyCheckSuccess
+	PolicyCheckSummary string
 }
 
 type projectResultTmplData struct {
@@ -133,7 +136,7 @@ func GetMarkdownRenderer(
 // Render formats the data into a markdown string.
 // nolint: interfacer
 func (m *MarkdownRenderer) Render(res command.Result, cmdName command.Name, log string, verbose bool, vcsHost models.VCSHostType) string {
-	commandStr := strings.Title(strings.Replace(cmdName.String(), "_", " ", -1))
+	commandStr := cases.Title(language.English).String(strings.Replace(cmdName.String(), "_", " ", -1))
 	common := commonData{
 		Command:                  commandStr,
 		Verbose:                  verbose,
@@ -199,7 +202,7 @@ func (m *MarkdownRenderer) renderProjectResults(results []command.ProjectResult,
 			numPlanSuccesses++
 		} else if result.PolicyCheckSuccess != nil {
 			if m.shouldUseWrappedTmpl(vcsHost, result.PolicyCheckSuccess.PolicyCheckOutput) {
-				resultData.Rendered = m.renderTemplate(templates.Lookup("policyCheckSuccessWrapped"), policyCheckSuccessData{PolicyCheckSuccess: *result.PolicyCheckSuccess})
+				resultData.Rendered = m.renderTemplate(templates.Lookup("policyCheckSuccessWrapped"), policyCheckSuccessData{PolicyCheckSuccess: *result.PolicyCheckSuccess, PolicyCheckSummary: result.PolicyCheckSuccess.Summary()})
 			} else {
 				resultData.Rendered = m.renderTemplate(templates.Lookup("policyCheckSuccessUnwrapped"), policyCheckSuccessData{PolicyCheckSuccess: *result.PolicyCheckSuccess})
 			}

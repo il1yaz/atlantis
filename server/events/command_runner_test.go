@@ -32,7 +32,6 @@ import (
 	lockingmocks "github.com/runatlantis/atlantis/server/core/locking/mocks"
 	"github.com/runatlantis/atlantis/server/events"
 	"github.com/runatlantis/atlantis/server/events/mocks"
-	eventmocks "github.com/runatlantis/atlantis/server/events/mocks"
 	"github.com/runatlantis/atlantis/server/events/mocks/matchers"
 	"github.com/runatlantis/atlantis/server/events/models"
 	"github.com/runatlantis/atlantis/server/events/models/fixtures"
@@ -82,13 +81,12 @@ func setup(t *testing.T) *vcsmocks.MockClient {
 	workingDir = mocks.NewMockWorkingDir()
 	pendingPlanFinder = mocks.NewMockPendingPlanFinder()
 	commitUpdater = mocks.NewMockCommitStatusUpdater()
-	tmp, cleanup := TempDir(t)
-	defer cleanup()
+	tmp := t.TempDir()
 	defaultBoltDB, err := db.New(tmp)
 	Ok(t, err)
 
 	drainer = &events.Drainer{}
-	deleteLockCommand = eventmocks.NewMockDeleteLockCommand()
+	deleteLockCommand = mocks.NewMockDeleteLockCommand()
 	applyLockChecker = lockingmocks.NewMockApplyLockChecker()
 	lockingLocker = lockingmocks.NewMockLocker()
 
@@ -535,8 +533,7 @@ func TestRunUnlockCommandFail_VCSComment(t *testing.T) {
 
 func TestRunAutoplanCommand_DeletePlans(t *testing.T) {
 	setup(t)
-	tmp, cleanup := TempDir(t)
-	defer cleanup()
+	tmp := t.TempDir()
 	boltDB, err := db.New(tmp)
 	Ok(t, err)
 	dbUpdater.Backend = boltDB
@@ -563,8 +560,7 @@ func TestRunAutoplanCommand_DeletePlans(t *testing.T) {
 
 func TestRunGenericPlanCommand_DeletePlans(t *testing.T) {
 	setup(t)
-	tmp, cleanup := TempDir(t)
-	defer cleanup()
+	tmp := t.TempDir()
 	boltDB, err := db.New(tmp)
 	Ok(t, err)
 	dbUpdater.Backend = boltDB
@@ -586,8 +582,7 @@ func TestRunGenericPlanCommand_DeletePlans(t *testing.T) {
 
 func TestRunSpecificPlanCommandDoesnt_DeletePlans(t *testing.T) {
 	setup(t)
-	tmp, cleanup := TempDir(t)
-	defer cleanup()
+	tmp := t.TempDir()
 	boltDB, err := db.New(tmp)
 	Ok(t, err)
 	dbUpdater.Backend = boltDB
@@ -606,8 +601,7 @@ func TestRunSpecificPlanCommandDoesnt_DeletePlans(t *testing.T) {
 // we delete the plans.
 func TestRunAutoplanCommandWithError_DeletePlans(t *testing.T) {
 	setup(t)
-	tmp, cleanup := TempDir(t)
-	defer cleanup()
+	tmp := t.TempDir()
 	boltDB, err := db.New(tmp)
 	Ok(t, err)
 	dbUpdater.Backend = boltDB
@@ -654,8 +648,7 @@ func TestRunAutoplanCommandWithError_DeletePlans(t *testing.T) {
 func TestFailedApprovalCreatesFailedStatusUpdate(t *testing.T) {
 	t.Log("if \"atlantis approve_policies\" is run by non policy owner policy check status fails.")
 	setup(t)
-	tmp, cleanup := TempDir(t)
-	defer cleanup()
+	tmp := t.TempDir()
 	boltDB, err := db.New(tmp)
 	Ok(t, err)
 	dbUpdater.Backend = boltDB
@@ -700,8 +693,7 @@ func TestFailedApprovalCreatesFailedStatusUpdate(t *testing.T) {
 func TestApprovedPoliciesUpdateFailedPolicyStatus(t *testing.T) {
 	t.Log("if \"atlantis approve_policies\" is run by policy owner all policy checks are approved.")
 	setup(t)
-	tmp, cleanup := TempDir(t)
-	defer cleanup()
+	tmp := t.TempDir()
 	boltDB, err := db.New(tmp)
 	Ok(t, err)
 	dbUpdater.Backend = boltDB
@@ -756,8 +748,7 @@ func TestApprovedPoliciesUpdateFailedPolicyStatus(t *testing.T) {
 func TestApplyMergeablityWhenPolicyCheckFails(t *testing.T) {
 	t.Log("if \"atlantis apply\" is run with failing policy check then apply is not performed")
 	setup(t)
-	tmp, cleanup := TempDir(t)
-	defer cleanup()
+	tmp := t.TempDir()
 	boltDB, err := db.New(tmp)
 	Ok(t, err)
 	dbUpdater.Backend = boltDB
@@ -835,8 +826,7 @@ func TestRunApply_DiscardedProjects(t *testing.T) {
 	vcsClient := setup(t)
 	autoMerger.GlobalAutomerge = true
 	defer func() { autoMerger.GlobalAutomerge = false }()
-	tmp, cleanup := TempDir(t)
-	defer cleanup()
+	tmp := t.TempDir()
 	boltDB, err := db.New(tmp)
 	Ok(t, err)
 	dbUpdater.Backend = boltDB

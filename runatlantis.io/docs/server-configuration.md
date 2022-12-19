@@ -383,9 +383,14 @@ Values are chosen in this order:
 
 ### `--gh-team-allowlist`
   ```bash
-  atlantis server --gh-team-allowlist="myteam:plan, secteam:apply"
+  atlantis server --gh-team-allowlist="myteam:plan, secteam:apply, DevOps Team:apply"
   ```
   Comma-separated list of GitHub team name (not a slug) and permission pairs. By default, any team can plan and apply.
+  
+  ::: warning NOTE
+  You should use the Team name as the variable, not the slug, even if it has spaces or special characters.
+  i.e., "Engineering Team:plan, Infrastructure Team:apply"
+  :::
 
 ### `--gh-allow-mergeable-bypass-apply`
   ```bash
@@ -464,7 +469,7 @@ Values are chosen in this order:
   Markdown template overrides may be specified either in individual files, or all together in a single file. All template
   override files _must_ have the `.tmpl` extension, otherwise they will not be parsed.
 
-  Markdown templates which may have overrides can be found [here](https://github.com/runatlantis/atlantis/tree/master/server/events/templates)
+  Markdown templates which may have overrides can be found [here](https://github.com/runatlantis/atlantis/tree/main/server/events/templates)
 
   Please be mindful that settings like `--enable-diff-markdown-format` depend on logic defined in the templates. It is
   possible to diverge from expected behavior, if care is not taken when overriding default templates.
