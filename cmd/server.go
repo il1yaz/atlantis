@@ -21,14 +21,16 @@ import (
 	"strings"
 
 	homedir "github.com/mitchellh/go-homedir"
-	"github.com/moby/moby/pkg/fileutils"
+	"github.com/moby/patternmatcher"
 	"github.com/pkg/errors"
-	"github.com/runatlantis/atlantis/server"
-	"github.com/runatlantis/atlantis/server/core/config/valid"
-	"github.com/runatlantis/atlantis/server/events/vcs/bitbucketcloud"
-	"github.com/runatlantis/atlantis/server/logging"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/runatlantis/atlantis/server"
+	"github.com/runatlantis/atlantis/server/core/config/valid"
+	"github.com/runatlantis/atlantis/server/events/command"
+	"github.com/runatlantis/atlantis/server/events/vcs/bitbucketcloud"
+	"github.com/runatlantis/atlantis/server/logging"
 )
 
 // To add a new flag you must:
@@ -42,10 +44,13 @@ const (
 	ADTokenFlag                      = "azuredevops-token" // nolint: gosec
 	ADUserFlag                       = "azuredevops-user"
 	ADHostnameFlag                   = "azuredevops-hostname"
+	AllowCommandsFlag                = "allow-commands"
 	AllowForkPRsFlag                 = "allow-fork-prs"
 	AllowRepoConfigFlag              = "allow-repo-config"
 	AtlantisURLFlag                  = "atlantis-url"
 	AutomergeFlag                    = "automerge"
+	AutoplanModules                  = "autoplan-modules"
+	AutoplanModulesFromProjects      = "autoplan-modules-from-projects"
 	AutoplanFileListFlag             = "autoplan-file-list"
 	BitbucketBaseURLFlag             = "bitbucket-base-url"
 	BitbucketTokenFlag               = "bitbucket-token"
@@ -60,9 +65,11 @@ const (
 	DisableAutoplanFlag              = "disable-autoplan"
 	DisableMarkdownFoldingFlag       = "disable-markdown-folding"
 	DisableRepoLockingFlag           = "disable-repo-locking"
+	DiscardApprovalOnPlanFlag        = "discard-approval-on-plan"
 	EnablePolicyChecksFlag           = "enable-policy-checks"
 	EnableRegExpCmdFlag              = "enable-regexp-cmd"
 	EnableDiffMarkdownFormat         = "enable-diff-markdown-format"
+	ExecutableName                   = "executable-name"
 	GHHostnameFlag                   = "gh-hostname"
 	GHTeamAllowlistFlag              = "gh-team-allowlist"
 	GHTokenFlag                      = "gh-token"
@@ -112,6 +119,8 @@ const (
 	SlackTokenFlag             = "slack-token"
 	SSLCertFileFlag            = "ssl-cert-file"
 	SSLKeyFileFlag             = "ssl-key-file"
+	RestrictFileList           = "restrict-file-list"
+	TFDownloadFlag             = "tf-download"
 	TFDownloadURLFlag          = "tf-download-url"
 	VarFileAllowlistFlag       = "var-file-allowlist"
 	VCSStatusName              = "vcs-status-name"
@@ -129,9 +138,11 @@ const (
 	DefaultADBasicPassword              = ""
 	DefaultADHostname                   = "dev.azure.com"
 	DefaultAutoplanFileList             = "**/*.tf,**/*.tfvars,**/*.tfvars.json,**/terragrunt.hcl,**/.terraform.lock.hcl"
+	DefaultAllowCommands                = "version,plan,apply,unlock,approve_policies"
 	DefaultCheckoutStrategy             = "branch"
 	DefaultBitbucketBaseURL             = bitbucketcloud.BaseURL
 	DefaultDataDir                      = "~/.atlantis"
+	DefaultExecutableName               = "atlantis"
 	DefaultMarkdownTemplateOverridesDir = "~/.markdown_templates"
 	DefaultGHHostname                   = "github.com"
 	DefaultGitlabHostname               = "gitlab.com"
@@ -145,6 +156,7 @@ const (
 	DefaultRedisTLSEnabled              = false
 	DefaultRedisInsecureSkipVerify      = false
 	DefaultTFDownloadURL                = "https://releases.hashicorp.com"
+	DefaultTFDownload                   = true
 	DefaultTFEHostname                  = "app.terraform.io"
 	DefaultVCSStatusName                = "atlantis"
 	DefaultWebBasicAuth                 = false
@@ -175,8 +187,19 @@ var stringFlags = map[string]stringFlag{
 		description:  "Azure DevOps hostname to support cloud and self hosted instances.",
 		defaultValue: "dev.azure.com",
 	},
+	AllowCommandsFlag: {
+		description:  "Comma separated list of acceptable atlantis commands.",
+		defaultValue: DefaultAllowCommands,
+	},
 	AtlantisURLFlag: {
 		description: "URL that Atlantis can be reached at. Defaults to http://$(hostname):$port where $port is from --" + PortFlag + ". Supports a base path ex. https://example.com/basepath.",
+	},
+	AutoplanModulesFromProjects: {
+		description: "Comma separated list of file patterns to select projects Atlantis will index for module dependencies." +
+			" Indexed projects will automatically be planned if a module they depend on is modified." +
+			" Patterns use the dockerignore (https://docs.docker.com/engine/reference/builder/#dockerignore-file) syntax." +
+			" A custom Workflow that uses autoplan 'when_modified' will ignore this value.",
+		defaultValue: "",
 	},
 	AutoplanFileListFlag: {
 		description: "Comma separated list of file patterns that Atlantis will use to check if a directory contains modified files that should trigger project planning." +
@@ -218,6 +241,10 @@ var stringFlags = map[string]stringFlag{
 	DataDirFlag: {
 		description:  "Path to directory to store Atlantis data.",
 		defaultValue: DefaultDataDir,
+	},
+	ExecutableName: {
+		description:  "Comment command executable name.",
+		defaultValue: DefaultExecutableName,
 	},
 	GHHostnameFlag: {
 		description:  "Hostname of your Github Enterprise installation. If using github.com, no need to set.",
@@ -279,7 +306,7 @@ var stringFlags = map[string]stringFlag{
 			"Should be specified via the ATLANTIS_GITLAB_WEBHOOK_SECRET environment variable.",
 	},
 	APISecretFlag: {
-		description: "Secret to validate requests made to the API",
+		description: "Secret used to validate requests made to the /api/* endpoints",
 	},
 	LockingDBType: {
 		description:  "The locking database type to use for storing plan and apply locks.",
@@ -378,6 +405,10 @@ var boolFlags = map[string]boolFlag{
 		defaultValue: false,
 		hidden:       true,
 	},
+	AutoplanModules: {
+		description:  "Automatically plan projects that have a changed module from the local repository.",
+		defaultValue: false,
+	},
 	AutomergeFlag: {
 		description:  "Automatically merge pull requests when all plans are successfully applied.",
 		defaultValue: false,
@@ -396,6 +427,10 @@ var boolFlags = map[string]boolFlag{
 	},
 	DisableRepoLockingFlag: {
 		description: "Disable atlantis locking repos",
+	},
+	DiscardApprovalOnPlanFlag: {
+		description:  "Enables the discarding of approval if a new plan has been executed. Currently only Github is supported",
+		defaultValue: false,
 	},
 	EnablePolicyChecksFlag: {
 		description:  "Enable atlantis to run user defined policy checks.  This is explicitly disabled for TFE/TFC backends since plan files are inaccessible.",
@@ -478,6 +513,10 @@ var boolFlags = map[string]boolFlag{
 		description:  "Skips cloning the PR repo if there are no projects were changed in the PR.",
 		defaultValue: false,
 	},
+	TFDownloadFlag: {
+		description:  "Allow Atlantis to list & download Terraform versions. Setting this to false can be helpful in air-gapped environments.",
+		defaultValue: DefaultTFDownload,
+	},
 	TFELocalExecutionModeFlag: {
 		description:  "Enable if you're using local execution mode (instead of TFE/C's remote execution mode).",
 		defaultValue: false,
@@ -485,6 +524,10 @@ var boolFlags = map[string]boolFlag{
 	WebBasicAuthFlag: {
 		description:  "Switches on or off the Basic Authentication on the HTTP Middleware interface",
 		defaultValue: DefaultWebBasicAuth,
+	},
+	RestrictFileList: {
+		description:  "Block plan requests from projects outside the files modified in the pull request.",
+		defaultValue: false,
 	},
 	WebsocketCheckOrigin: {
 		description:  "Enable websocket origin check",
@@ -719,6 +762,9 @@ func (s *ServerCmd) setDefaults(c *server.UserConfig) {
 	if c.AutoplanFileList == "" {
 		c.AutoplanFileList = DefaultAutoplanFileList
 	}
+	if c.AllowCommands == "" {
+		c.AllowCommands = DefaultAllowCommands
+	}
 	if c.CheckoutStrategy == "" {
 		c.CheckoutStrategy = DefaultCheckoutStrategy
 	}
@@ -733,6 +779,9 @@ func (s *ServerCmd) setDefaults(c *server.UserConfig) {
 	}
 	if c.BitbucketBaseURL == "" {
 		c.BitbucketBaseURL = DefaultBitbucketBaseURL
+	}
+	if c.ExecutableName == "" {
+		c.ExecutableName = DefaultExecutableName
 	}
 	if c.LockingDBType == "" {
 		c.LockingDBType = DefaultLockingDBType
@@ -865,9 +914,13 @@ func (s *ServerCmd) validate(userConfig server.UserConfig) error {
 		return fmt.Errorf("if setting --%s, must set --%s", TFEHostnameFlag, TFETokenFlag)
 	}
 
-	_, patternErr := fileutils.NewPatternMatcher(strings.Split(userConfig.AutoplanFileList, ","))
+	_, patternErr := patternmatcher.New(strings.Split(userConfig.AutoplanFileList, ","))
 	if patternErr != nil {
 		return errors.Wrapf(patternErr, "invalid pattern in --%s, %s", AutoplanFileListFlag, userConfig.AutoplanFileList)
+	}
+
+	if _, err := userConfig.ToAllowCommandNames(); err != nil {
+		return errors.Wrapf(err, "invalid --%s", AllowCommandsFlag)
 	}
 
 	return nil
@@ -971,30 +1024,43 @@ func (s *ServerCmd) securityWarnings(userConfig *server.UserConfig) {
 // being used. Right now this only applies to flags that have been made obsolete
 // due to server-side config.
 func (s *ServerCmd) deprecationWarnings(userConfig *server.UserConfig) error {
-	var applyReqs []string
+	var commandReqs []string
 	var deprecatedFlags []string
 	if userConfig.RequireApproval {
 		deprecatedFlags = append(deprecatedFlags, RequireApprovalFlag)
-		applyReqs = append(applyReqs, valid.ApprovedApplyReq)
+		commandReqs = append(commandReqs, valid.ApprovedCommandReq)
 	}
 	if userConfig.RequireMergeable {
 		deprecatedFlags = append(deprecatedFlags, RequireMergeableFlag)
-		applyReqs = append(applyReqs, valid.MergeableApplyReq)
+		commandReqs = append(commandReqs, valid.MergeableCommandReq)
+	}
+	if userConfig.DisableApply {
+		deprecatedFlags = append(deprecatedFlags, DisableApplyFlag)
+		var filtered []string
+		for _, allowCommand := range strings.Split(userConfig.AllowCommands, ",") {
+			if allowCommand != command.Apply.String() {
+				filtered = append(filtered, allowCommand)
+			}
+		}
+		userConfig.AllowCommands = strings.Join(filtered, ",")
 	}
 
 	// Build up strings with what the recommended yaml and json config should
 	// be instead of using the deprecated flags.
 	yamlCfg := "---\nrepos:\n- id: /.*/"
 	jsonCfg := `{"repos":[{"id":"/.*/"`
-	if len(applyReqs) > 0 {
-		yamlCfg += fmt.Sprintf("\n  apply_requirements: [%s]", strings.Join(applyReqs, ", "))
-		jsonCfg += fmt.Sprintf(`, "apply_requirements":["%s"]`, strings.Join(applyReqs, "\", \""))
-
+	if len(commandReqs) > 0 {
+		yamlCfg += fmt.Sprintf("\n  plan_requirements: [%s]", strings.Join(commandReqs, ", "))
+		yamlCfg += fmt.Sprintf("\n  apply_requirements: [%s]", strings.Join(commandReqs, ", "))
+		yamlCfg += fmt.Sprintf("\n  import_requirements: [%s]", strings.Join(commandReqs, ", "))
+		jsonCfg += fmt.Sprintf(`, "plan_requirements":["%s"]`, strings.Join(commandReqs, "\", \""))
+		jsonCfg += fmt.Sprintf(`, "apply_requirements":["%s"]`, strings.Join(commandReqs, "\", \""))
+		jsonCfg += fmt.Sprintf(`, "import_requirements":["%s"]`, strings.Join(commandReqs, "\", \""))
 	}
 	if userConfig.AllowRepoConfig {
 		deprecatedFlags = append(deprecatedFlags, AllowRepoConfigFlag)
-		yamlCfg += "\n  allowed_overrides: [apply_requirements, workflow]\n  allow_custom_workflows: true"
-		jsonCfg += `, "allowed_overrides":["apply_requirements","workflow"], "allow_custom_workflows":true`
+		yamlCfg += "\n  allowed_overrides: [plan_requirements, apply_requirements, import_requirements, workflow]\n  allow_custom_workflows: true"
+		jsonCfg += `, "allowed_overrides":["plan_requirements","apply_requirements","import_requirements","workflow"], "allow_custom_workflows":true`
 	}
 	jsonCfg += "}]}"
 

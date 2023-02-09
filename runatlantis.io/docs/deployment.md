@@ -536,6 +536,13 @@ Cloud Storage Backend and TLS certs: [https://github.com/sethvargo/atlantis-on-g
 
 Once you're done, see [Next Steps](#next-steps).
 
+### Google Compute Engine (GCE)
+Atlantis can be run on Google Compute Engine using a Terraform module that deploys it as a Docker container on a managed Compute Engine instance. 
+
+This [Terraform module](https://registry.terraform.io/modules/bschaatsbergen/atlantis/gce/latest) features the creation of a Cloud load balancer, a Container-Optimized OS-based VM, a persistent data disk, and a managed instance group.
+
+After it is deployed, see [Next Steps](#next-steps).
+
 ### Docker
 Atlantis has an [official](https://ghcr.io/runatlantis/atlantis) Docker image: `ghcr.io/runatlantis/atlantis`.
 
@@ -563,7 +570,8 @@ If you need to modify the Docker image that we provide, for instance to add the 
 ### Microsoft Azure
 The standard [Kubernetes Helm Chart](#kubernetes-helm-chart) should work fine on [Azure Kubernetes Service](https://docs.microsoft.com/en-us/azure/aks/intro-kubernetes).
 
-Another option is [Azure Container Instances](https://docs.microsoft.com/en-us/azure/container-instances/). See this community member's [repo](https://github.com/jplane/atlantis-on-aci) for install scripts and more information on running Atlantis on ACI.
+
+Another option is [Azure Container Instances](https://docs.microsoft.com/en-us/azure/container-instances/). See this community member's [repo](https://github.com/jplane/atlantis-on-aci) or the new and more up-to-date [Terraform module](https://github.com/getindata/terraform-azurerm-atlantis) for install scripts and more information on running Atlantis on ACI.    
 
 ### Roll Your Own
 If you want to roll your own Atlantis installation, you can get the `atlantis`

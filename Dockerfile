@@ -1,19 +1,42 @@
+ARG ATLANTIS_BASE=ghcr.io/runatlantis/atlantis-base
+ARG ATLANTIS_BASE_TAG_DATE=latest
+ARG ATLANTIS_BASE_TAG_TYPE=alpine
+
 # Stage 1: build artifact
-FROM golang:1.19.3-alpine AS builder
+
+FROM golang:1.20.0-alpine AS builder
+
+ARG ATLANTIS_VERSION=dev
+ENV ATLANTIS_VERSION=${ATLANTIS_VERSION}
+ARG ATLANTIS_COMMIT=none
+ENV ATLANTIS_COMMIT=${ATLANTIS_COMMIT}
+ARG ATLANTIS_DATE=unknown
+ENV ATLANTIS_DATE=${ATLANTIS_DATE}
 
 WORKDIR /app
+
+# This is needed to download transitive dependencies instead of compiling them
+# https://github.com/montanaflynn/golang-docker-cache
+# https://github.com/golang/go/issues/27719
+COPY go.mod go.sum ./
+RUN go mod graph | awk '{if ($1 !~ "@") print $2}' | xargs go get
+
 COPY . /app
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -v -o atlantis .
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X 'main.version=${ATLANTIS_VERSION}' -X 'main.commit=${ATLANTIS_COMMIT}' -X 'main.date=${ATLANTIS_DATE}'" -v -o atlantis .
 
 # Stage 2
-# The runatlantis/atlantis-base is created by docker-base/Dockerfile.
-FROM ghcr.io/runatlantis/atlantis-base:2022.11.13 AS base
+# The runatlantis/atlantis-base is created by docker-base/Dockerfile
+FROM ${ATLANTIS_BASE}:${ATLANTIS_BASE_TAG_DATE}-${ATLANTIS_BASE_TAG_TYPE} AS base
 
 # Get the architecture the image is being built for
 ARG TARGETPLATFORM
 
 # install terraform binaries
-ENV DEFAULT_TERRAFORM_VERSION=1.3.5
+# renovate: datasource=github-releases depName=hashicorp/terraform versioning=hashicorp
+ENV DEFAULT_TERRAFORM_VERSION=1.3.7
 
 # In the official Atlantis image we only have the latest of each Terraform version.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -36,23 +59,24 @@ RUN AVAILABLE_TERRAFORM_VERSIONS="1.0.11 1.1.9 1.2.9 ${DEFAULT_TERRAFORM_VERSION
     done && \
     ln -s "/usr/local/bin/tf/versions/${DEFAULT_TERRAFORM_VERSION}/terraform" /usr/local/bin/terraform
 
-ENV DEFAULT_CONFTEST_VERSION=0.35.0
+# renovate: datasource=github-releases depName=open-policy-agent/conftest
+ENV DEFAULT_CONFTEST_VERSION=0.38.0
 
 RUN AVAILABLE_CONFTEST_VERSIONS="${DEFAULT_CONFTEST_VERSION}" && \
-    case ${TARGETPLATFORM} in \
+    case "${TARGETPLATFORM}" in \
         "linux/amd64") CONFTEST_ARCH=x86_64 ;; \
         "linux/arm64") CONFTEST_ARCH=arm64 ;; \
         # There is currently no compiled version of conftest for armv7
         "linux/arm/v7") CONFTEST_ARCH=x86_64 ;; \
     esac && \
     for VERSION in ${AVAILABLE_CONFTEST_VERSIONS}; do \
-        curl -LOs https://github.com/open-policy-agent/conftest/releases/download/v${VERSION}/conftest_${VERSION}_Linux_${CONFTEST_ARCH}.tar.gz && \
-        curl -LOs https://github.com/open-policy-agent/conftest/releases/download/v${VERSION}/checksums.txt && \
+        curl -LOs "https://github.com/open-policy-agent/conftest/releases/download/v${VERSION}/conftest_${VERSION}_Linux_${CONFTEST_ARCH}.tar.gz" && \
+        curl -LOs "https://github.com/open-policy-agent/conftest/releases/download/v${VERSION}/checksums.txt" && \
         sed -n "/conftest_${VERSION}_Linux_${CONFTEST_ARCH}.tar.gz/p" checksums.txt | sha256sum -c && \
-        mkdir -p /usr/local/bin/cft/versions/${VERSION} && \
-        tar -C /usr/local/bin/cft/versions/${VERSION} -xzf conftest_${VERSION}_Linux_${CONFTEST_ARCH}.tar.gz && \
-        ln -s /usr/local/bin/cft/versions/${VERSION}/conftest /usr/local/bin/conftest${VERSION} && \
-        rm conftest_${VERSION}_Linux_${CONFTEST_ARCH}.tar.gz && \
+        mkdir -p "/usr/local/bin/cft/versions/${VERSION}" && \
+        tar -C "/usr/local/bin/cft/versions/${VERSION}" -xzf "conftest_${VERSION}_Linux_${CONFTEST_ARCH}.tar.gz" && \
+        ln -s "/usr/local/bin/cft/versions/${VERSION}/conftest" "/usr/local/bin/conftest${VERSION}" && \
+        rm "conftest_${VERSION}_Linux_${CONFTEST_ARCH}.tar.gz" && \
         rm checksums.txt; \
     done
 

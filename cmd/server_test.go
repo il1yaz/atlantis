@@ -22,13 +22,14 @@ import (
 	"testing"
 
 	homedir "github.com/mitchellh/go-homedir"
-	"github.com/runatlantis/atlantis/server"
-	"github.com/runatlantis/atlantis/server/events/vcs/fixtures"
-	"github.com/runatlantis/atlantis/server/logging"
-	. "github.com/runatlantis/atlantis/testing"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
+
+	"github.com/runatlantis/atlantis/server"
+	"github.com/runatlantis/atlantis/server/events/vcs/testdata"
+	"github.com/runatlantis/atlantis/server/logging"
+	. "github.com/runatlantis/atlantis/testing"
 )
 
 // passedConfig is set to whatever config ended up being passed to NewServer.
@@ -56,6 +57,7 @@ var testFlags = map[string]interface{}{
 	ADWebhookPasswordFlag:            "ad-wh-pass",
 	ADWebhookUserFlag:                "ad-wh-user",
 	AtlantisURLFlag:                  "url",
+	AllowCommandsFlag:                "version,plan,unlock,import,approve_policies", // apply is disabled by DisableApply
 	AllowForkPRsFlag:                 true,
 	AllowRepoConfigFlag:              true,
 	AutomergeFlag:                    true,
@@ -71,6 +73,7 @@ var testFlags = map[string]interface{}{
 	DisableApplyFlag:                 true,
 	DisableMarkdownFoldingFlag:       true,
 	DisableRepoLockingFlag:           true,
+	DiscardApprovalOnPlanFlag:        true,
 	GHHostnameFlag:                   "ghhostname",
 	GHTokenFlag:                      "token",
 	GHUserFlag:                       "user",
@@ -102,6 +105,7 @@ var testFlags = map[string]interface{}{
 	SlackTokenFlag:                   "slack-token",
 	SSLCertFileFlag:                  "cert-file",
 	SSLKeyFileFlag:                   "key-file",
+	RestrictFileList:                 false,
 	TFDownloadURLFlag:                "https://my-hostname.com",
 	TFEHostnameFlag:                  "my-hostname",
 	TFELocalExecutionModeFlag:        true,
@@ -423,7 +427,7 @@ func TestExecute_ValidateVCSConfig(t *testing.T) {
 		{
 			"just github app key set",
 			map[string]interface{}{
-				GHAppKeyFlag: fixtures.GithubPrivateKey,
+				GHAppKeyFlag: testdata.GithubPrivateKey,
 			},
 			true,
 		},
@@ -492,7 +496,7 @@ func TestExecute_ValidateVCSConfig(t *testing.T) {
 			"github app and key set and should be successful",
 			map[string]interface{}{
 				GHAppIDFlag:  "1",
-				GHAppKeyFlag: fixtures.GithubPrivateKey,
+				GHAppKeyFlag: testdata.GithubPrivateKey,
 			},
 			false,
 		},
@@ -550,6 +554,36 @@ func TestExecute_ValidateVCSConfig(t *testing.T) {
 	}
 }
 
+func TestExecute_ValidateAllowCommands(t *testing.T) {
+	cases := []struct {
+		name              string
+		allowCommandsFlag string
+		expErr            string
+	}{
+		{
+			name:              "invalid allow commands",
+			allowCommandsFlag: "noallow",
+			expErr:            "invalid --allow-commands: unknown command name: noallow",
+		},
+		{
+			name:              "success with empty allow commands",
+			allowCommandsFlag: "",
+			expErr:            "",
+		},
+	}
+	for _, testCase := range cases {
+		c := setupWithDefaults(map[string]interface{}{
+			AllowCommandsFlag: testCase.allowCommandsFlag,
+		}, t)
+		err := c.Execute()
+		if testCase.expErr != "" {
+			ErrEquals(t, testCase.expErr, err)
+		} else {
+			Ok(t, err)
+		}
+	}
+}
+
 func TestExecute_ExpandHomeInDataDir(t *testing.T) {
 	t.Log("If ~ is used as a data-dir path, should expand to absolute home path")
 	c := setup(map[string]interface{}{
@@ -597,7 +631,7 @@ func TestExecute_GithubUser(t *testing.T) {
 func TestExecute_GithubApp(t *testing.T) {
 	t.Log("Should remove the @ from the github username if it's passed.")
 	c := setup(map[string]interface{}{
-		GHAppKeyFlag:      fixtures.GithubPrivateKey,
+		GHAppKeyFlag:      testdata.GithubPrivateKey,
 		GHAppIDFlag:       "1",
 		RepoAllowlistFlag: "*",
 	}, t)
@@ -749,6 +783,16 @@ func TestExecute_BothSilenceAllowAndWhitelistErrors(t *testing.T) {
 	ErrEquals(t, "both --silence-allowlist-errors and --silence-whitelist-errors cannot be set–use --silence-allowlist-errors", err)
 }
 
+func TestExecute_DisableApplyDeprecation(t *testing.T) {
+	c := setupWithDefaults(map[string]interface{}{
+		DisableApplyFlag:  true,
+		AllowCommandsFlag: "plan,apply,unlock",
+	}, t)
+	err := c.Execute()
+	Ok(t, err)
+	Equals(t, "plan,unlock", passedConfig.AllowCommands)
+}
+
 // Test that we set the corresponding allow list values on the userConfig
 // struct if the deprecated whitelist flags are used.
 func TestExecute_RepoWhitelistDeprecation(t *testing.T) {
@@ -762,6 +806,23 @@ func TestExecute_RepoWhitelistDeprecation(t *testing.T) {
 	Ok(t, err)
 	Equals(t, true, passedConfig.SilenceAllowlistErrors)
 	Equals(t, "*", passedConfig.RepoAllowlist)
+}
+
+func TestExecute_AutoDetectModulesFromProjects_Env(t *testing.T) {
+	t.Setenv("ATLANTIS_AUTOPLAN_MODULES_FROM_PROJECTS", "**/init.tf")
+	c := setupWithDefaults(map[string]interface{}{}, t)
+	err := c.Execute()
+	Ok(t, err)
+	Equals(t, "**/init.tf", passedConfig.AutoplanModulesFromProjects)
+}
+
+func TestExecute_AutoDetectModulesFromProjects(t *testing.T) {
+	c := setupWithDefaults(map[string]interface{}{
+		AutoplanModulesFromProjects: "**/*.tf",
+	}, t)
+	err := c.Execute()
+	Ok(t, err)
+	Equals(t, "**/*.tf", passedConfig.AutoplanModulesFromProjects)
 }
 
 func TestExecute_AutoplanFileList(t *testing.T) {

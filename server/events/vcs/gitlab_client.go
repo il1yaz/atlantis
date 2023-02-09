@@ -22,8 +22,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/runatlantis/atlantis/server/core/config"
-
 	"github.com/runatlantis/atlantis/server/events/command"
 	"github.com/runatlantis/atlantis/server/events/vcs/common"
 
@@ -223,7 +221,7 @@ func (g *GitlabClient) PullIsMergeable(repo models.Repo, pull models.PullRequest
 
 	isPipelineSkipped := mr.HeadPipeline.Status == "skipped"
 	allowSkippedPipeline := project.AllowMergeOnSkippedPipeline && isPipelineSkipped
-	if mr.MergeStatus == "can_be_merged" &&
+	if (mr.DetailedMergeStatus == "mergeable" || mr.DetailedMergeStatus == "ci_still_running") &&
 		mr.ApprovalsBeforeMerge <= 0 &&
 		mr.BlockingDiscussionsResolved &&
 		!mr.WorkInProgress &&
@@ -244,12 +242,26 @@ func (g *GitlabClient) UpdateStatus(repo models.Repo, pull models.PullRequest, s
 	case models.SuccessCommitStatus:
 		gitlabState = gitlab.Success
 	}
-	_, _, err := g.Client.Commits.SetCommitStatus(repo.FullName, pull.HeadCommit, &gitlab.SetCommitStatusOptions{
+
+	mr, err := g.GetMergeRequest(pull.BaseRepo.FullName, pull.Num)
+	if err != nil {
+		return err
+	}
+	// refTarget is set to current branch if no pipeline is assigned to the commit,
+	// otherwise it is set to the pipeline created by the merge_request_event rule
+	refTarget := pull.HeadBranch
+	if mr.Pipeline != nil {
+		switch mr.Pipeline.Source {
+		case "merge_request_event":
+			refTarget = fmt.Sprintf("refs/merge-requests/%d/head", pull.Num)
+		}
+	}
+	_, _, err = g.Client.Commits.SetCommitStatus(repo.FullName, pull.HeadCommit, &gitlab.SetCommitStatusOptions{
 		State:       gitlabState,
 		Context:     gitlab.String(src),
 		Description: gitlab.String(description),
 		TargetURL:   &url,
-		Ref:         gitlab.String(pull.HeadBranch),
+		Ref:         gitlab.String(refTarget),
 	})
 	return err
 }
@@ -315,6 +327,11 @@ func (g *GitlabClient) MarkdownPullLink(pull models.PullRequest) (string, error)
 	return fmt.Sprintf("!%d", pull.Num), nil
 }
 
+func (g *GitlabClient) DiscardReviews(repo models.Repo, pull models.PullRequest) error {
+	// TODO implement
+	return nil
+}
+
 // GetVersion returns the version of the Gitlab server this client is using.
 func (g *GitlabClient) GetVersion() (*version.Version, error) {
 	req, err := g.Client.NewRequest("GET", "/version", nil, nil)
@@ -363,13 +380,13 @@ func (g *GitlabClient) GetTeamNamesForUser(repo models.Repo, user models.User) (
 	return nil, nil
 }
 
-// DownloadRepoConfigFile return `atlantis.yaml` content from VCS (which support fetch a single file from repository)
-// The first return value indicate that repo contain atlantis.yaml or not
-// if BaseRepo had one repo config file, its content will placed on the second return value
-func (g *GitlabClient) DownloadRepoConfigFile(pull models.PullRequest) (bool, []byte, error) {
+// GetFileContent a repository file content from VCS (which support fetch a single file from repository)
+// The first return value indicates whether the repo contains a file or not
+// if BaseRepo had a file, its content will placed on the second return value
+func (g *GitlabClient) GetFileContent(pull models.PullRequest, fileName string) (bool, []byte, error) {
 	opt := gitlab.GetRawFileOptions{Ref: gitlab.String(pull.HeadBranch)}
 
-	bytes, resp, err := g.Client.RepositoryFiles.GetRawFile(pull.BaseRepo.FullName, config.AtlantisYAMLFilename, &opt)
+	bytes, resp, err := g.Client.RepositoryFiles.GetRawFile(pull.BaseRepo.FullName, fileName, &opt)
 	if resp.StatusCode == http.StatusNotFound {
 		return false, []byte{}, nil
 	}

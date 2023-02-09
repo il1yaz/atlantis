@@ -130,7 +130,7 @@ We use [pegomock](https://github.com/petergtz/pegomock) for mocking. If you're
 modifying any interfaces that are mocked, you'll need to regen the mocks for that
 interface.
 
-Install using `go get github.com/petergtz/pegomock/pegomock`
+Install using `go install github.com/petergtz/pegomock/pegomock`
 
 If you see errors like:
 ```
@@ -143,7 +143,7 @@ Then you've likely modified an interface and now need to update the mocks.
 
 Each interface that is mocked has a `go:generate` command above it, e.g.
 ```go
-//go:generate pegomock generate -m --use-experimental-model-gen --package mocks -o mocks/mock_project_command_builder.go ProjectCommandBuilder
+//go:generate pegomock generate -m --package mocks -o mocks/mock_project_command_builder.go ProjectCommandBuilder
 
 type ProjectCommandBuilder interface {
 	BuildAutoplanCommands(ctx *command.Context) ([]command.ProjectContext, error)
